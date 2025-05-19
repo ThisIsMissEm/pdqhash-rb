@@ -1,19 +1,24 @@
+use hex;
+use image::io::Reader as ImageReader;
 use magnus::{function, prelude::*, Error, Ruby};
 use pdqhash;
-use image::io::Reader as ImageReader;
-use hex;
 
+/// Returns the hex-encoded PDQ hash for the image at `filepath`.
+///
+/// Returns a wrapped Ruby IO exception if `filepath` could not be opened.
+///
+/// Returns a wrapped Ruby Encoding exception if `filepath` could not be decoded.
 fn hash(ruby: &Ruby, filepath: String) -> Result<String, Error> {
-    let image_result = ImageReader::open(filepath);
-    let image = match image_result {
-        Ok(f) => f.decode(),
-        Err(e) => return Err(Error::new(
-            ruby.exception_io_error(),
-            format!("Could not open image: {}", e)
-        )),
-    };
-    let hash = pdqhash::generate_pdq_full_size(&image.unwrap()).0;
-    Ok(hex::encode(hash))
+    let reader = ImageReader::open(filepath)
+        .map_err(|e| Error::new(ruby.exception_io_error(), format!("open: {}", e)))?;
+
+    let dynamic_image = reader
+        .decode()
+        .map_err(|e| Error::new(ruby.exception_encoding_error(), format!("decode: {}", e)))?;
+
+    Ok(hex::encode(
+        pdqhash::generate_pdq_full_size(&dynamic_image).0,
+    ))
 }
 
 #[magnus::init]
